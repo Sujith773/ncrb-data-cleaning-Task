@@ -5,8 +5,8 @@ import pandas as pd
 def extract_tables_from_pdfs(year):
     input_dir = f"raw/{year}"
     output_dir = f"processed/"
-    os.makedirs(output_dir, exist_ok=True)
-    all_dfs = []
+    os.makedirs(output_dir, exist_ok=True)               # Create directory if it doesn't exist
+    all_dfs = []                            # Lists to hold all extracted dataframes
 
     for file in os.listdir(input_dir):
         if file.endswith(".pdf"):
@@ -19,7 +19,8 @@ def extract_tables_from_pdfs(year):
                 df = table.df
                 if "State/UT" in df.to_string():
                     all_dfs.append(df)
-
+                    
+# Combine and save all valid dataframes into one CSV
     if all_dfs:
         combined_df = pd.concat(all_dfs, ignore_index=True)
         combined_df.to_csv(f"{output_dir}suicide_data_{year}.csv", index=False)
