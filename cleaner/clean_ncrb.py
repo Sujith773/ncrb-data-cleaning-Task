@@ -12,7 +12,7 @@ def extract_and_clean_pdf_tables(year):
     for file in os.listdir(input_dir):
         if file.endswith(".pdf") and "Table 1.3" in file:
             file_path = os.path.join(input_dir, file)
-            print(f"📄 Extracting tables from: {file_path}")
+            print(f" Extracting tables from: {file_path}")
             tables = camelot.read_pdf(file_path, pages="all", flavor="stream")
 
             for i, table in enumerate(tables):
@@ -21,7 +21,7 @@ def extract_and_clean_pdf_tables(year):
                 # Save raw table for debugging
                 debug_file = os.path.join(debug_dir, f"debug_{year}_{file.replace('.pdf', '')}_table{i}.csv")
                 df.to_csv(debug_file, index=False)
-                print(f"✅ Saved debug table to: {debug_file}")
+                print(f"Saved debug table to: {debug_file}")
 
                 # Assign fixed headers manually if structure is known
                 expected_columns = [
@@ -35,7 +35,7 @@ def extract_and_clean_pdf_tables(year):
                 if df.shape[1] >= len(expected_columns):
                     df.columns = expected_columns[:df.shape[1]]
                 else:
-                    print(f"❌ Skipping {file} table {i} - Unexpected number of columns")
+                    print(f"Skipping {file} table {i} - Unexpected number of columns")
                     continue
 
                 # Remove total/all rows
@@ -72,6 +72,6 @@ if __name__ == "__main__":
     if not final_df.empty:
         os.makedirs("processed", exist_ok=True)
         final_df.to_csv("processed/suicide_data_cleaned.csv", index=False)
-        print("✅ Final cleaned data saved to: processed/suicide_data_cleaned.csv")
+        print(" Final cleaned data saved to: processed/suicide_data_cleaned.csv")
     else:
-        print("❌ Final cleaned data is empty. Please check debug tables.")
+        print(" Final cleaned data is empty. Please check debug tables.")
