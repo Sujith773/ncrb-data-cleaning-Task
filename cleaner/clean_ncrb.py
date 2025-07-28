@@ -2,59 +2,76 @@ import os
 import camelot
 import pandas as pd
 
-# Function to extract and reformat data from all PDF files for a given year
-def extract_tables_from_pdfs(year):
-    input_dir = f"raw/{year}"  # Define the folder path containing PDF files for the given year
-    all_dfs = []  # Initialize list to hold extracted and formatted DataFrames
+def extract_and_clean_pdf_tables(year):
+    input_dir = f"raw/{year}"
+    debug_dir = "debug_tables"
+    os.makedirs(debug_dir, exist_ok=True)
 
-    # Loop through each PDF file in the year's folder
+    all_cleaned_rows = []
+
     for file in os.listdir(input_dir):
-        if file.endswith(".pdf"):
+        if file.endswith(".pdf") and "Table 1.3" in file:
             file_path = os.path.join(input_dir, file)
-            print(f"Extracting from: {file_path}")
-
-            # Extract all tables from the PDF using Camelot (stream flavor preferred for structured data)
+            print(f"📄 Extracting tables from: {file_path}")
             tables = camelot.read_pdf(file_path, pages="all", flavor="stream")
 
-            # Iterate over each extracted table
-            for table in tables:
-                df = table.df  # Get DataFrame from table
-                if "State/UT" in df.to_string():  # Filter tables that contain relevant headers
-                    df.columns = df.iloc[0]  # Use first row as column headers
-                    df = df[1:]  # Remove header row from data
-                    df.insert(0, "Year", year)  # Add a new 'Year' column to track the year of the data
+            for i, table in enumerate(tables):
+                df = table.df
 
-                    # Convert wide format into long format if category columns exist
-                    if 'State/UT' in df.columns:
-                        id_vars = ["Year", "State/UT"]
-                        value_vars = [col for col in df.columns if col not in id_vars]
-                        melted = pd.melt(df, id_vars=id_vars, value_vars=value_vars,
-                                         var_name="category", value_name="value")
-                        melted.rename(columns={"State/UT": "state"}, inplace=True)  # Rename for consistency
-                        all_dfs.append(melted)  # Append the cleaned table to the list
+                # Save raw table for debugging
+                debug_file = os.path.join(debug_dir, f"debug_{year}_{file.replace('.pdf', '')}_table{i}.csv")
+                df.to_csv(debug_file, index=False)
+                print(f"✅ Saved debug table to: {debug_file}")
 
-    return all_dfs  # Return all extracted and formatted DataFrames
+                # Assign fixed headers manually if structure is known
+                expected_columns = [
+                    "index",
+                    "state",
+                    "2020_suicides", "2021_suicides", "suicides_variation",
+                    "2020_percent", "2021_percent", "percent_variation",
+                    "2020_population", "2021_population", "population_variation"
+                ]
+
+                if df.shape[1] >= len(expected_columns):
+                    df.columns = expected_columns[:df.shape[1]]
+                else:
+                    print(f"❌ Skipping {file} table {i} - Unexpected number of columns")
+                    continue
+
+                # Remove total/all rows
+                df = df[~df["state"].str.contains("total|all", case=False, na=False)]
+
+                for _, row in df.iterrows():
+                    state = str(row["state"]).strip()
+
+                    try:
+                        suicides = float(str(row["2021_suicides"]).replace(",", ""))
+                        population = float(str(row["2021_population"]).replace(",", ""))
+                        rate = round(suicides / population, 2) if population > 0 else ""
+                    except:
+                        rate = ""
+
+                    all_cleaned_rows.extend([
+                        {"year": year, "state": state, "category": "Number of Suicides", "value": row["2021_suicides"], "unit": "value in Absolute number", "note": ""},
+                        {"year": year, "state": state, "category": "Percentage Share in Total", "value": row["2021_percent"], "unit": "value in Percentage", "note": ""},
+                        {"year": year, "state": state, "category": "Projected Mid Year Population", "value": row["2021_population"], "unit": "value in Lakh", "note": ""},
+                        {"year": year, "state": state, "category": "Rate of Suicides", "value": rate, "unit": "value in Ratio", "note": "calculated as suicides/population"}
+                    ])
+
+    return all_cleaned_rows
 
 if __name__ == "__main__":
-    combined_dfs = []  # List to hold combined data across multiple years
+    all_years = [2021, 2022]
+    all_data = []
 
-    # Loop over each target year and extract tables
-    for year in [2021, 2022]:
-        combined_dfs.extend(extract_tables_from_pdfs(year))
+    for year in all_years:
+        all_data.extend(extract_and_clean_pdf_tables(year))
 
-    # If any data was extracted, merge and save it
-    if combined_dfs:
-        os.makedirs("processed", exist_ok=True)  # Ensure the processed folder exists
-        final_df = pd.concat(combined_dfs, ignore_index=True)  # Merge all yearly data
+    final_df = pd.DataFrame(all_data)
 
-        # Add 'unit' and 'note' columns with placeholder values (can be manually updated if needed)
-        final_df["unit"] = ""
-        final_df["note"] = ""
-
-        # Reorder and rename columns to match final format
-        final_df = final_df[["Year", "state", "category", "value", "unit", "note"]]
-        final_df.columns = ["year", "state", "category", "value", "unit", "note"]
-
-        # Save final cleaned and formatted data to CSV
+    if not final_df.empty:
+        os.makedirs("processed", exist_ok=True)
         final_df.to_csv("processed/suicide_data_cleaned.csv", index=False)
-        print("Final cleaned data saved to: processed/suicide_data_cleaned.csv")
+        print("✅ Final cleaned data saved to: processed/suicide_data_cleaned.csv")
+    else:
+        print("❌ Final cleaned data is empty. Please check debug tables.")
